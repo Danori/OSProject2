@@ -114,7 +114,7 @@ unsigned int findEntry(struct PageTable pageTable, unsigned int pageNum)
         }
     }
 
-    return -1;
+    return PAGE_FAULT;
 }
 
 void printDebugInfo(struct PageTable pageTable)
@@ -178,6 +178,9 @@ void rdm()
                     pageTable.isFull = true;
                 }
             }
+            else if (!PageTable.isFull && rw == 'W') {
+
+            }
             else if (pageTable.isFull && rw == 'R') {
                 randIndex = rand() % numFrames;
                 
@@ -190,7 +193,7 @@ void rdm()
                 pageTable.entries[randIndex].dirty = false;
                 numReads++;
             }
-            else if (rw == 'W') {
+            else if (pagetable.isFull && rw == 'W') {
                 numWrites++;
             }
             
