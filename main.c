@@ -178,7 +178,7 @@ void rdm()
                     pageTable.isFull = true;
                 }
             }
-            else if (!PageTable.isFull && rw == 'W') {
+            else if (!pageTable.isFull && rw == 'W') {
 
             }
             else if (pageTable.isFull && rw == 'R') {
@@ -193,7 +193,7 @@ void rdm()
                 pageTable.entries[randIndex].dirty = false;
                 numReads++;
             }
-            else if (pagetable.isFull && rw == 'W') {
+            else if (pageTable.isFull && rw == 'W') {
                 numWrites++;
             }
             
