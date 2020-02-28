@@ -46,6 +46,7 @@ void removeNode(struct DLinkedList *list, int index);
 void insertAtFront(struct DLinkedList *list, struct Node *node);
 struct Node *findNode(struct DLinkedList *list, int index);
 void updateRecency(struct DLinkedList *list, int index);
+int getLeastRecent(struct DLinkedList *list);
 void freeList(struct DLinkedList *list);
 void printList(struct DLinkedList *list);
 
@@ -135,7 +136,7 @@ struct PageTable initPageTable()
 
 struct DLinkedList initLinkedList()
 {
-    printf("Adding header and trailer nodes ...\n");
+    //printf("Adding header and trailer nodes ...\n");
     struct DLinkedList list;
     
     list.header = malloc(sizeof(struct Node));
@@ -156,7 +157,7 @@ struct DLinkedList initLinkedList()
 
 void addNode(struct DLinkedList *list, int index)
 {
-    printf("Adding node %d at front ...\n", index);
+    //printf("Adding node %d at front ...\n", index);
     struct Node *newNode = malloc(sizeof(struct Node));
 
     newNode->index = index;
@@ -174,7 +175,7 @@ void removeNode(struct DLinkedList *list, int index)
     struct Node *node = findNode(list, index);
 
     if (node != NULL) {
-        printf("Removing node %d ...\n", index);
+        //printf("Removing node %d ...\n", index);
         node->prev->next = node->next;
         node->next->prev = node->prev;
 
@@ -187,7 +188,7 @@ void removeNode(struct DLinkedList *list, int index)
 
 void insertAtFront(struct DLinkedList *list, struct Node *node)
 {
-    printf("Inserting node %d at front ...\n", node->index);
+    //printf("Inserting node %d at front ...\n", node->index);
 
     struct Node *prev = node->prev;
     struct Node *next = node->next;
@@ -200,6 +201,17 @@ void insertAtFront(struct DLinkedList *list, struct Node *node)
     list->header->next = node;
 }
 
+void updateRecency(struct DLinkedList *list, int index)
+{
+    struct Node *node = findNode(list, index);
+
+    if (node != NULL) {
+        insertAtFront(list, node);
+    }
+}
+
+int getLeastRecent(struct DLinkedList *list);
+
 struct Node *findNode(struct DLinkedList *list, int index)
 {
     struct Node *currNode = list->header;
@@ -208,13 +220,22 @@ struct Node *findNode(struct DLinkedList *list, int index)
         currNode = currNode->next;
 
         if (currNode->index == index) {
-            printf("Found node %d ...\n", index);
+            //printf("Found node %d ...\n", index);
             return currNode;
         }
     }
 
-    printf("Unable to find node %d ...\n", index);
+    //printf("Unable to find node %d ...\n", index);
     return NULL;
+}
+
+int getLeastRecent(struct DLinkedList *list)
+{
+    if (list->trailer->prev != NULL) {
+        return list->trailer->prev->index;
+    }
+
+    return -1;
 }
 
 void freeList(struct DLinkedList *list)
@@ -223,10 +244,10 @@ void freeList(struct DLinkedList *list)
         removeNode(list, list->header->next->index);
     }
 
-    printf("Removing header and trailer sentinel nodes ...\n");
+    //printf("Removing header and trailer sentinel nodes ...\n");
     free(list->header);
     free(list->trailer);
-    printf("Entire list successfully freed ...\n");
+    //printf("Entire list successfully freed ...\n");
 }
 
 unsigned int getPageNum(unsigned int address)
@@ -245,10 +266,8 @@ unsigned int findEntry(struct PageTable pageTable, unsigned int pageNum)
     return PAGE_FAULT;
 }
 
-void printDebugInfo(struct PageTable pageTable)
+void printPageTable(struct PageTable pageTable)
 {
-    printf("NumReads: %-8d NumWrites: %-8d\n\n", numReads, numWrites);
-
     printf("PAGE TABLE\n");
     printf("numEntries: %-6d isFull: %d\n", pageTable.numEntries, pageTable.isFull);
     printf("============================\n");
@@ -256,11 +275,17 @@ void printDebugInfo(struct PageTable pageTable)
     for (int i = 0; i < numFrames; i++) {
         printf("%-6d 0x%08x     %d\n", i, pageTable.entries[i].pageNum, pageTable.entries[i].dirty);
     }
+    printf("============================\n");
 }
 
 void printList(struct DLinkedList *list)
 {
-    printf("Printing list on following line ...\n");
+    printf("RECENCY LIST\n");
+
+    if (list->numNodes == 0) {
+        printf("{EMPTY}");
+    }
+
     struct Node *currNode = list->header;
 
     while (currNode->next != list->trailer) {
@@ -285,8 +310,9 @@ void rdm()
         pageNum = getPageNum(address);
 
         if (debug) {
-            printf("Next Address: 0x%08x RW: %c PageNumber: 0x%08x\n", address, rw, pageNum);
-            printDebugInfo(pageTable);
+            printf("NumReads: %-8d NumWrites: %-8d\n\n", numReads, numWrites);
+            printPageTable(pageTable);
+            printf("Next Address: 0x%08x PageNumber: 0x%08x RW: %c \n", address, pageNum, rw);
             printf("Enter x to exit. ");
 
             exitCh = getchar();
@@ -345,40 +371,84 @@ void rdm()
 
 void lru()
 {
-    struct DLinkedList list = initLinkedList();
+    struct PageTable pageTable = initPageTable();
+    struct DLinkedList recencyList = initLinkedList();
 
-    addNode(&list, 0);
-    addNode(&list, 5);
-    addNode(&list, 10);
+    unsigned int address, pageNum;
+    char rw, exitCh;
 
-    printList(&list);
+    int index = 0, pageToRemoveIndex = 0;
+    while (fscanf(traceFile, "%x %c", &address, &rw) != EOF) {
+        numEvents++;
+        pageNum = getPageNum(address);
 
-    addNode(&list, 15);
-    addNode(&list, 20);
+        if (debug) {
+            printf("NumReads: %-8d NumWrites: %-8d\n\n", numReads, numWrites);
+            printPageTable(pageTable);
+            printList(&recencyList);
+            printf("Next Address: 0x%08x PageNumber: 0x%08x RW: %c \n", address, pageNum, rw);
+            printf("Enter x to exit. ");
 
-    struct Node *node = findNode(&list, 5);
-    if (node != NULL) {
-        insertAtFront(&list, node);
+            exitCh = getchar();
+            if (exitCh == 'X' || exitCh == 'x') {
+                free(pageTable.entries);
+                freeList(&recencyList);
+                exit(0);
+            }
+        }
+        
+        index = findEntry(pageTable, pageNum);
+
+        if (index != PAGE_FAULT) {
+            updateRecency(&recencyList, index);
+
+            if (rw == 'R') {
+                continue;
+            }
+            else {
+                pageTable.entries[index].dirty = true;
+            }
+        }
+        else {
+            if (!pageTable.isFull) {
+                pageTable.entries[pageTable.numEntries].pageNum = pageNum;
+
+                addNode(&recencyList, pageTable.numEntries);
+
+                if (rw == 'W') {
+                    pageTable.entries[pageTable.numEntries].dirty = true;
+                }
+
+                pageTable.numEntries++;
+                numReads++;
+
+                if (pageTable.numEntries == numFrames) {
+                    pageTable.isFull = true;
+                }
+            }
+            else {
+                pageToRemoveIndex = getLeastRecent(&recencyList);
+                
+                if (pageTable.entries[pageToRemoveIndex].dirty) {
+                    numWrites++;
+                }
+
+                pageTable.entries[pageToRemoveIndex].pageNum = pageNum;
+                numReads++;
+                if (rw == 'R') {
+                    pageTable.entries[pageToRemoveIndex].dirty = false;
+                }
+                else {
+                    pageTable.entries[pageToRemoveIndex].dirty = true;
+                }
+
+                updateRecency(&recencyList, pageToRemoveIndex);
+            }
+        }
     }
 
-    node = findNode(&list, 5);
-    if (node != NULL) {
-        insertAtFront(&list, node);
-    }
-
-    node = findNode(&list, 0);
-    if (node != NULL) {
-        insertAtFront(&list, node);
-    }
-
-    printList(&list);
-
-    removeNode(&list, 10);
-    removeNode(&list, 35);
-
-    printList(&list);
-
-    freeList(&list);
+    free(pageTable.entries);
+    freeList(&recencyList);
 }
 
 void fifo()
