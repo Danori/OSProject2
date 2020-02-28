@@ -6,16 +6,6 @@
 
 #define PAGE_FAULT -1
 
-/**
- * Global variables just to avoid passing them / returning them
- * to / from the replacement policy functions.
- */
-FILE *traceFile;
-int numFrames = 0, numReads = 0, 
-numWrites = 0, numEvents = 0;
-char *replacementPolicy;
-bool debug;
-
 struct PageTableEntry
 {
     int pageNum;
@@ -33,26 +23,50 @@ struct PageTable
 struct Node
 {
     int index;
-    struct Node *next;
     struct Node *prev;
+    struct Node *next;
 };
 
 struct DLinkedList
 {
-
+    int numNodes;
+    struct Node *header;
+    struct Node *trailer;
 };
 
-// Helper functions.
+// Page Table functions.
 struct PageTable initPageTable();
-unsigned int getPageNum(unsigned int address);
+void printPageTable(struct PageTable pageTable);
 unsigned int findEntry(struct PageTable pageTable, unsigned int pageNum);
-void printDebugInfo(struct PageTable pageTable);
+
+// Linked List functions.
+struct DLinkedList initLinkedList();
+void addNode(struct DLinkedList *list, int index);
+void removeNode(struct DLinkedList *list, int index);
+void insertAtFront(struct DLinkedList *list, struct Node *node);
+struct Node *findNode(struct DLinkedList *list, int index);
+void updateRecency(struct DLinkedList *list, int index);
+void freeList(struct DLinkedList *list);
+void printList(struct DLinkedList *list);
+
+// Random helper functions.
+unsigned int getPageNum(unsigned int address);
 
 // Replacement Policy functions.
 void rdm();
 void lru();
 void fifo();
 void vms();
+
+/**
+ * Global variables just to avoid passing them / returning them
+ * to / from the replacement policy functions.
+ */
+FILE *traceFile;
+int numFrames = 0, numReads = 0, 
+numWrites = 0, numEvents = 0;
+char *replacementPolicy;
+bool debug;
 
 int main(int argc, char *argv[])
 {
@@ -119,6 +133,102 @@ struct PageTable initPageTable()
     return pageTable;
 }
 
+struct DLinkedList initLinkedList()
+{
+    printf("Adding header and trailer nodes ...\n");
+    struct DLinkedList list;
+    
+    list.header = malloc(sizeof(struct Node));
+    list.trailer = malloc(sizeof(struct Node));
+
+    list.numNodes = 0;
+
+    list.header->index = -1;
+    list.header->next = list.trailer;
+    list.header->prev = NULL;
+
+    list.trailer->index = -1;
+    list.trailer->prev = list.header;
+    list.trailer->next = NULL;
+
+    return list;
+}
+
+void addNode(struct DLinkedList *list, int index)
+{
+    printf("Adding node %d at front ...\n", index);
+    struct Node *newNode = malloc(sizeof(struct Node));
+
+    newNode->index = index;
+
+    newNode->prev = list->header;
+    newNode->next = list->header->next;
+    list->header->next->prev = newNode;
+    list->header->next = newNode;
+
+    list->numNodes++;
+}
+
+void removeNode(struct DLinkedList *list, int index)
+{
+    struct Node *node = findNode(list, index);
+
+    if (node != NULL) {
+        printf("Removing node %d ...\n", index);
+        node->prev->next = node->next;
+        node->next->prev = node->prev;
+
+        free(node);
+
+        list->numNodes--;
+    }
+
+}
+
+void insertAtFront(struct DLinkedList *list, struct Node *node)
+{
+    printf("Inserting node %d at front ...\n", node->index);
+
+    struct Node *prev = node->prev;
+    struct Node *next = node->next;
+
+    prev->next = next;
+    next->prev = prev;
+    node->prev = list->header;
+    node->next = list->header->next;
+    list->header->next->prev = node;
+    list->header->next = node;
+}
+
+struct Node *findNode(struct DLinkedList *list, int index)
+{
+    struct Node *currNode = list->header;
+
+    while (currNode->next != list->trailer) {
+        currNode = currNode->next;
+
+        if (currNode->index == index) {
+            printf("Found node %d ...\n", index);
+            return currNode;
+        }
+    }
+
+    printf("Unable to find node %d ...\n", index);
+    return NULL;
+}
+
+void freeList(struct DLinkedList *list)
+{
+    while (list->numNodes != 0) {
+        removeNode(list, list->header->next->index);
+    }
+
+    printf("Removing header and trailer sentinel nodes ...\n");
+    free(list->header);
+    free(list->trailer);
+    printf("Entire list successfully freed ...\n");
+}
+
 unsigned int getPageNum(unsigned int address)
 {
     return (address & 0xFFFFF000) >> 12;
@@ -148,6 +258,18 @@ void printDebugInfo(struct PageTable pageTable)
     }
 }
 
+void printList(struct DLinkedList *list)
+{
+    printf("Printing list on following line ...\n");
+    struct Node *currNode = list->header;
+
+    while (currNode->next != list->trailer) {
+        currNode = currNode->next;
+        printf("%d ", currNode->index);
+    }
+    printf("\n");
+}
+
 void rdm()
 {
     srand(time(0));
@@ -163,16 +285,14 @@ void rdm()
         pageNum = getPageNum(address);
 
         if (debug) {
-            printf("Address: 0x%08x RW: %c PageNum: 0x%08x\n", address, rw, pageNum);
-            if (numEvents % 10 == 0) {
-                printDebugInfo(pageTable);
-                printf("Enter x to exit. ");
+            printf("Next Address: 0x%08x RW: %c PageNumber: 0x%08x\n", address, rw, pageNum);
+            printDebugInfo(pageTable);
+            printf("Enter x to exit. ");
 
-                exitCh = getchar();
-                if (exitCh == 'X' || exitCh == 'x') {
-                    free(pageTable.entries);
-                    exit(0);
-                }
+            exitCh = getchar();
+            if (exitCh == 'X' || exitCh == 'x') {
+                free(pageTable.entries);
+                exit(0);
             }
         }
         
@@ -215,10 +335,7 @@ void rdm()
                 }
                 else {
                     pageTable.entries[randIndex].dirty = true;
-                    
                 }
-
-
             }
         }
     }
@@ -228,7 +345,40 @@ void rdm()
 
 void lru()
 {
+    struct DLinkedList list = initLinkedList();
 
+    addNode(&list, 0);
+    addNode(&list, 5);
+    addNode(&list, 10);
+
+    printList(&list);
+
+    addNode(&list, 15);
+    addNode(&list, 20);
+
+    struct Node *node = findNode(&list, 5);
+    if (node != NULL) {
+        insertAtFront(&list, node);
+    }
+
+    node = findNode(&list, 5);
+    if (node != NULL) {
+        insertAtFront(&list, node);
+    }
+
+    node = findNode(&list, 0);
+    if (node != NULL) {
+        insertAtFront(&list, node);
+    }
+
+    printList(&list);
+
+    removeNode(&list, 10);
+    removeNode(&list, 35);
+
+    printList(&list);
+
+    freeList(&list);
 }
 
 void fifo()
