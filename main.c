@@ -11,23 +11,38 @@
  * to / from the replacement policy functions.
  */
 FILE *traceFile;
-int numFrames = 0, numReads = 0, numWrites = 0;
+int numFrames = 0, numReads = 0, 
+numWrites = 0, numEvents = 0;
 char *replacementPolicy;
 bool debug;
 
-struct PageTableEntry {
+struct PageTableEntry
+{
     int pageNum;
     bool dirty;
     bool secondChance;
 };
 
-struct PageTable {
+struct PageTable
+{
     struct PageTableEntry *entries;
     int numEntries;
     bool isFull;
 };
 
-// Helper functions
+struct Node
+{
+    int index;
+    struct Node *next;
+    struct Node *prev;
+};
+
+struct DLinkedList
+{
+
+};
+
+// Helper functions.
 struct PageTable initPageTable();
 unsigned int getPageNum(unsigned int address);
 unsigned int findEntry(struct PageTable pageTable, unsigned int pageNum);
@@ -80,7 +95,10 @@ int main(int argc, char *argv[])
         printf("Unrecognized replacement policy. Options: rdm lru fifo vms\n");
     }
 
-
+    printf("Total memory frames: %d\n", numFrames);
+    printf("Events in trace: %d\n", numEvents);
+    printf("Total disk reads: %d\n", numReads);
+    printf("Total disk writes: %d\n", numWrites);
 
     return 0;
 }
@@ -124,9 +142,9 @@ void printDebugInfo(struct PageTable pageTable)
     printf("PAGE TABLE\n");
     printf("numEntries: %-6d isFull: %d\n", pageTable.numEntries, pageTable.isFull);
     printf("============================\n");
-    printf("Entry: PageNumber: Dirty:\n");
+    printf("Entry: PageNumber:    Dirty:\n");
     for (int i = 0; i < numFrames; i++) {
-        printf("%-6d 0x%08x  %d\n", i, pageTable.entries[i].pageNum, pageTable.entries[i].dirty);
+        printf("%-6d 0x%08x     %d\n", i, pageTable.entries[i].pageNum, pageTable.entries[i].dirty);
     }
 }
 
@@ -139,14 +157,14 @@ void rdm()
     unsigned int address, pageNum;
     char rw, exitCh;
 
-    int counter = 1, index = 0, randIndex = 0;
+    int index = 0, randIndex = 0;
     while (fscanf(traceFile, "%x %c", &address, &rw) != EOF) {
+        numEvents++;
         pageNum = getPageNum(address);
 
         if (debug) {
             printf("Address: 0x%08x RW: %c PageNum: 0x%08x\n", address, rw, pageNum);
-            counter++;
-            if (counter % 11 == 0) {
+            if (numEvents % 10 == 0) {
                 printDebugInfo(pageTable);
                 printf("Enter x to exit. ");
 
