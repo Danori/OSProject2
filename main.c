@@ -169,8 +169,13 @@ void rdm()
             }
         }
         else {
-            if (!pageTable.isFull && rw == 'R') {
+            if (!pageTable.isFull) {
                 pageTable.entries[pageTable.numEntries].pageNum = pageNum;
+
+                if (rw == 'W') {
+                    pageTable.entries[pageTable.numEntries].dirty = true;
+                }
+
                 pageTable.numEntries++;
                 numReads++;
 
@@ -178,27 +183,26 @@ void rdm()
                     pageTable.isFull = true;
                 }
             }
-            else if (!pageTable.isFull && rw == 'W') {
-
-            }
-            else if (pageTable.isFull && rw == 'R') {
+            else {
                 randIndex = rand() % numFrames;
-                
                 
                 if (pageTable.entries[randIndex].dirty) {
                     numWrites++;
                 }
 
                 pageTable.entries[randIndex].pageNum = pageNum;
-                pageTable.entries[randIndex].dirty = false;
                 numReads++;
-            }
-            else if (pageTable.isFull && rw == 'W') {
-                numWrites++;
-            }
-            
-        }
+                if (rw == 'R') {
+                    pageTable.entries[randIndex].dirty = false;
+                }
+                else {
+                    pageTable.entries[randIndex].dirty = true;
+                    
+                }
 
+
+            }
+        }
     }
 
     free(pageTable.entries);
