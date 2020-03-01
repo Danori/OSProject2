@@ -4,7 +4,6 @@
 #include <stdbool.h>
 #include <time.h>
 
-#define PAGE_FAULT -1
 #define PROCESS_B 0x30000000
 
 struct PageTableEntry
@@ -27,6 +26,12 @@ struct Node
     struct Node *next;
 };
 
+/**
+ * Linked list used to keep track of FIFO / recency.
+ * Nodes at the front of the list were added / accessed
+ * most recently, while those in the back are candidates
+ * for eviction.
+ */
 struct DLinkedList
 {
     int numNodes;
@@ -34,10 +39,12 @@ struct DLinkedList
     struct Node *trailer;
 };
 
+// Page table functions.
 struct PageTable initPageTable();
 void printPageTable(struct PageTable pageTable);
 struct PageTableEntry *findEntry(struct PageTable pageTable, unsigned int pageNum);
 
+// Linked list functions.
 struct DLinkedList initLinkedList();
 void addFront(struct DLinkedList *list, struct PageTableEntry *page);
 void rmFront(struct DLinkedList *list);
@@ -52,14 +59,17 @@ struct PageTableEntry *getLeastRecent(struct DLinkedList *list);
 void freeList(struct DLinkedList *list);
 void printList(struct DLinkedList *list);
 
+// Helper functions.
 unsigned int getPageNum(unsigned int address);
 unsigned int getProcess(unsigned int address);
 
+// Replacement policy functions.
 void rdm();
 void lru();
 void fifo();
 void vms();
 
+// Global variables.
 FILE *traceFile;
 int numFrames = 0, numReads = 0, 
 numWrites = 0, numEvents = 0;
@@ -68,12 +78,14 @@ bool debug;
 
 int main(int argc, char *argv[])
 {
+    // Check for proper number of arguments.
     if (argc != 5) {
         printf("Usage: memsim <tracefile> <numframes> <rdm|lru|fifo|vms> "
         "<debug|quiet>\n");
         return -1;
     }
 
+    // Open trace file, error check.
     traceFile = fopen(argv[1], "r");
     if (traceFile == NULL) {
         printf("Failed to open %s. Ensure proper file name and file is in " 
@@ -81,15 +93,13 @@ int main(int argc, char *argv[])
         return -1;
     }
 
+    // Read in rest of arguments.
     sscanf(argv[2], "%d", &numFrames);
     replacementPolicy = argv[3];
     char *debugStr = argv[4];
-    if (strcmp(debugStr, "debug") == 0) {
-        debug = true;
-    }
-    else {
-        debug = false;
-    }
+    debug = strcmp(debugStr, "debug") == 0 ? true : false;
+
+    // Execute passed replacement policy.
     if (strcmp(replacementPolicy, "rdm") == 0) {
         rdm();
     }
@@ -104,8 +114,10 @@ int main(int argc, char *argv[])
     }
     else {
         printf("Unrecognized replacement policy. Options: rdm lru fifo vms\n");
+        return -1;
     }
 
+    // Final output.
     printf("Total memory frames: %d\n", numFrames);
     printf("Events in trace: %d\n", numEvents);
     printf("Total disk reads: %d\n", numReads);
@@ -114,6 +126,7 @@ int main(int argc, char *argv[])
     return 0;
 }
 
+// Initialize empty page table of size numFrames.
 struct PageTable initPageTable()
 {
     struct PageTable pageTable;
@@ -130,6 +143,7 @@ struct PageTable initPageTable()
     return pageTable;
 }
 
+// Print page table for debugging.
 void printPageTable(struct PageTable pageTable)
 {
     printf("PAGE TABLE\n");
@@ -142,6 +156,7 @@ void printPageTable(struct PageTable pageTable)
     printf("============================\n");
 }
 
+// Find the PTE with the passed pageNum. If not found, returns NULL.
 struct PageTableEntry *findEntry(struct PageTable pageTable, unsigned int pageNum)
 {
     for (int i = 0; i < numFrames; i++) {
@@ -153,6 +168,7 @@ struct PageTableEntry *findEntry(struct PageTable pageTable, unsigned int pageNu
     return NULL;
 }
 
+// Initialize an empty linked list with sentinel nodes.
 struct DLinkedList initLinkedList()
 {
     
@@ -174,7 +190,7 @@ struct DLinkedList initLinkedList()
     return list;
 }
 
-
+// Add the passed PTE to the front of the passed linked list.
 void addFront(struct DLinkedList *list, struct PageTableEntry *page)
 {
     
@@ -190,6 +206,7 @@ void addFront(struct DLinkedList *list, struct PageTableEntry *page)
     list->numNodes++;
 }
 
+// Remove the PTE at the front of the passed linked list.
 void rmFront(struct DLinkedList *list)
 {
     struct Node *node = list->header->next;
@@ -205,7 +222,7 @@ void rmFront(struct DLinkedList *list)
     }
 }
 
-
+// Insert the passed node within the passed linked list to the front of the list.
 void insertFront(struct DLinkedList *list, struct Node *node)
 {
     struct Node *prev = node->prev;
@@ -219,6 +236,7 @@ void insertFront(struct DLinkedList *list, struct Node *node)
     list->header->next = node;
 }
 
+// Add the passed PTE to the back of the passed linked list.
 void addBack(struct DLinkedList *list, struct PageTableEntry *page)
 {
     struct Node *newNode = malloc(sizeof(struct Node));
@@ -233,6 +251,7 @@ void addBack(struct DLinkedList *list, struct PageTableEntry *page)
     list->numNodes++;
 }
 
+// Remove the PTE at the back of the linked list.
 void rmBack(struct DLinkedList *list)
 {
     struct Node *node = list->trailer->prev;
@@ -247,7 +266,7 @@ void rmBack(struct DLinkedList *list)
     }
 }
 
-
+// Insert the passed node within the passed linked list to the back of the list.
 void insertBack(struct DLinkedList *list, struct Node *node)
 {
     struct Node *prev = node->prev;
@@ -261,7 +280,7 @@ void insertBack(struct DLinkedList *list, struct Node *node)
     list->trailer->prev = node;
 }
 
-
+// Find and return the node containing the passed PTE. If not found, return NULL.
 struct Node *findNode(struct DLinkedList *list, struct PageTableEntry *page)
 {
     struct Node *currNode = list->header;
@@ -278,7 +297,7 @@ struct Node *findNode(struct DLinkedList *list, struct PageTableEntry *page)
     return NULL;
 }
 
-
+// Remove the node with the passed PTE from the passed list.
 void rmNode(struct DLinkedList *list, struct PageTableEntry *page)
 {
     struct Node *node = findNode(list, page);
@@ -294,6 +313,7 @@ void rmNode(struct DLinkedList *list, struct PageTableEntry *page)
 
 }
 
+// Used for LRU. Once a page is accessed, move it to the front of the list.
 void updateRecency(struct DLinkedList *list, struct PageTableEntry *page)
 {
     struct Node *node = findNode(list, page);
@@ -303,12 +323,13 @@ void updateRecency(struct DLinkedList *list, struct PageTableEntry *page)
     }
 }
 
-
+// Return the PTE which is next candidate for eviction. If list is empty, returns NULL.
 struct PageTableEntry *getLeastRecent(struct DLinkedList *list)
 {
     return list->trailer->prev->page;
 }
 
+// Free all the nodes within the passed list from memory.
 void freeList(struct DLinkedList *list)
 {
     while (list->numNodes != 0) {
@@ -320,18 +341,20 @@ void freeList(struct DLinkedList *list)
     
 }
 
-
+// Extract the page number from the passed address.
 unsigned int getPageNum(unsigned int address)
 {
     return address >> 12;
 }
 
+// Used for VMS. Find out which process an address corresponds to according to project description.
+// See macro PROCESS_B at start of 
 unsigned int getProcess(unsigned int address)
 {
     return address & 0xF0000000;
 }
 
-
+// Print the passed list for debugging purposes.
 void printList(struct DLinkedList *list)
 {
     if (list->numNodes == 0) {
@@ -347,23 +370,25 @@ void printList(struct DLinkedList *list)
     printf("\n");
 }
 
-
+// Random replacement policy simulation.
 void rdm()
 {
+    // Seed random function for random replacement.
     srand(time(0));
-    
     struct PageTable pageTable = initPageTable();
 
-    unsigned int address, pageNum;
+    // Some function variables.
+    unsigned int address, pageNum, randIndex = 0;
     char rw, exitCh;
-
     struct PageTableEntry *page;
-    int randIndex = 0;
-    
+
+    // Iterate through trace file reading in address and R / W until end of file.
     while (fscanf(traceFile, "%x %c", &address, &rw) != EOF) {
+        // Keep trace of number of events. Should be 1M at end of execution.
         numEvents++;
         pageNum = getPageNum(address);
 
+        // Print debug info and pause every iteration if requested.
         if (debug) {
             printf("NumReads: %-8d NumWrites: %-8d\n\n", numReads, numWrites);
             printPageTable(pageTable);
@@ -377,15 +402,18 @@ void rdm()
             }
         }
         
+        // Find the page within in the page table.
         page = findEntry(pageTable, pageNum);
 
+        // If its found, update its dirty bit if its written to.
         if (page != NULL) {
             if (rw == 'W') {
                 page->dirty = true;
             }
         }
-        
+        // Otherwise, page fault occured.
         else {
+            // While page table is not full, fill entry by entry.
             if (!pageTable.isFull) {
                 pageTable.entries[pageTable.numEntries].pageNum = pageNum;
 
@@ -396,10 +424,12 @@ void rdm()
                 pageTable.numEntries++;
                 numReads++;
 
+                // Swap to replacement policy once pageTable is full.
                 if (pageTable.numEntries == numFrames) {
                     pageTable.isFull = true;
                 }
             }
+            // Replace pages at random.
             else {
                 randIndex = rand() % numFrames;
                 
@@ -423,6 +453,7 @@ void rdm()
     free(pageTable.entries);
 }
 
+// Least recenctly used replacement policy simulation.
 void lru()
 {
     struct PageTable pageTable = initPageTable();
