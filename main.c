@@ -34,12 +34,10 @@ struct DLinkedList
     struct Node *trailer;
 };
 
-// Page Table functions.
 struct PageTable initPageTable();
 void printPageTable(struct PageTable pageTable);
 struct PageTableEntry *findEntry(struct PageTable pageTable, unsigned int pageNum);
 
-// Linked List functions.
 struct DLinkedList initLinkedList();
 void addFront(struct DLinkedList *list, struct PageTableEntry *page);
 void rmFront(struct DLinkedList *list);
@@ -54,20 +52,14 @@ struct PageTableEntry *getLeastRecent(struct DLinkedList *list);
 void freeList(struct DLinkedList *list);
 void printList(struct DLinkedList *list);
 
-// Random helper functions.
 unsigned int getPageNum(unsigned int address);
 unsigned int getProcess(unsigned int address);
 
-// Replacement Policy functions.
 void rdm();
 void lru();
 void fifo();
 void vms();
 
-/**
- * Global variables just to avoid passing them / returning them
- * to / from the replacement policy functions.
- */
 FILE *traceFile;
 int numFrames = 0, numReads = 0, 
 numWrites = 0, numEvents = 0;
@@ -76,14 +68,12 @@ bool debug;
 
 int main(int argc, char *argv[])
 {
-    // Ensure proper number of arguments.
     if (argc != 5) {
         printf("Usage: memsim <tracefile> <numframes> <rdm|lru|fifo|vms> "
         "<debug|quiet>\n");
         return -1;
     }
 
-    // Open trace file, error check.
     traceFile = fopen(argv[1], "r");
     if (traceFile == NULL) {
         printf("Failed to open %s. Ensure proper file name and file is in " 
@@ -91,7 +81,6 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    // Read in remaining arguements.
     sscanf(argv[2], "%d", &numFrames);
     replacementPolicy = argv[3];
     char *debugStr = argv[4];
@@ -101,8 +90,6 @@ int main(int argc, char *argv[])
     else {
         debug = false;
     }
-
-    // Execute respective replacement policy simulation.
     if (strcmp(replacementPolicy, "rdm") == 0) {
         rdm();
     }
@@ -119,7 +106,6 @@ int main(int argc, char *argv[])
         printf("Unrecognized replacement policy. Options: rdm lru fifo vms\n");
     }
 
-    // Final output.
     printf("Total memory frames: %d\n", numFrames);
     printf("Events in trace: %d\n", numEvents);
     printf("Total disk reads: %d\n", numReads);
@@ -128,7 +114,6 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-// Create the page table, initialize entries to default values.
 struct PageTable initPageTable()
 {
     struct PageTable pageTable;
@@ -145,7 +130,6 @@ struct PageTable initPageTable()
     return pageTable;
 }
 
-// Print the page table for debugging purposes.
 void printPageTable(struct PageTable pageTable)
 {
     printf("PAGE TABLE\n");
@@ -158,7 +142,6 @@ void printPageTable(struct PageTable pageTable)
     printf("============================\n");
 }
 
-// Find the entry with the pass pageNum. If not found, page fault occured.
 struct PageTableEntry *findEntry(struct PageTable pageTable, unsigned int pageNum)
 {
     for (int i = 0; i < numFrames; i++) {
@@ -170,10 +153,9 @@ struct PageTableEntry *findEntry(struct PageTable pageTable, unsigned int pageNu
     return NULL;
 }
 
-// Create linked list, allocate header / trailer, link them.
 struct DLinkedList initLinkedList()
 {
-    //printf("Adding header and trailer nodes ...\n");
+    
     struct DLinkedList list;
     
     list.header = malloc(sizeof(struct Node));
@@ -192,10 +174,10 @@ struct DLinkedList initLinkedList()
     return list;
 }
 
-// Add a node at the head of the linked list.
+
 void addFront(struct DLinkedList *list, struct PageTableEntry *page)
 {
-    //printf("Adding node 0x%08x at front ...\n", page->pageNum);
+    
     struct Node *newNode = malloc(sizeof(struct Node));
 
     newNode->page = page;
@@ -213,7 +195,7 @@ void rmFront(struct DLinkedList *list)
     struct Node *node = list->header->next;
 
     if (node != list->trailer) {
-        //printf("Removing 0x%08x at front ...\n", node->page->pageNum);
+        
         node->prev->next = node->next;
         node->next->prev = node->prev;
 
@@ -223,11 +205,9 @@ void rmFront(struct DLinkedList *list)
     }
 }
 
-// Take a node from the list and reinsert it at the head of the list.
+
 void insertFront(struct DLinkedList *list, struct Node *node)
 {
-    //printf("Inserting node 0x%08x at front ...\n", node->page->pageNum);
-
     struct Node *prev = node->prev;
     struct Node *next = node->next;
 
@@ -241,7 +221,6 @@ void insertFront(struct DLinkedList *list, struct Node *node)
 
 void addBack(struct DLinkedList *list, struct PageTableEntry *page)
 {
-    //printf("Adding node 0x%08x at back ...\n", page->pageNum);
     struct Node *newNode = malloc(sizeof(struct Node));
 
     newNode->page = page;
@@ -259,7 +238,6 @@ void rmBack(struct DLinkedList *list)
     struct Node *node = list->trailer->prev;
 
     if (node != list->header) {
-        //printf("Removing node 0x%08x at back ...\n", node->page->pageNum);
         node->prev->next = node->next;
         node->next->prev = node->prev;
 
@@ -269,11 +247,9 @@ void rmBack(struct DLinkedList *list)
     }
 }
 
-// Insert the passed node to the back of the linked list.
+
 void insertBack(struct DLinkedList *list, struct Node *node)
 {
-    //printf("Inserting node 0x%08x at back ...\n", node->page->pageNum);
-
     struct Node *prev = node->prev;
     struct Node *next = node->next;
 
@@ -285,7 +261,7 @@ void insertBack(struct DLinkedList *list, struct Node *node)
     list->trailer->prev = node;
 }
 
-// Find the node with the passed index in the linked list, return it.
+
 struct Node *findNode(struct DLinkedList *list, struct PageTableEntry *page)
 {
     struct Node *currNode = list->header;
@@ -294,22 +270,20 @@ struct Node *findNode(struct DLinkedList *list, struct PageTableEntry *page)
         currNode = currNode->next;
 
         if (currNode->page == page) {
-            //printf("Found node 0x%08x ...\n", page->pageNum);
+            
             return currNode;
         }
     }
-
-    //printf("Unable to find node 0x%08x ...\n", page->pageNum);
+    
     return NULL;
 }
 
-// Remove a node with the passed index from the linked list.
+
 void rmNode(struct DLinkedList *list, struct PageTableEntry *page)
 {
     struct Node *node = findNode(list, page);
 
     if (node != NULL) {
-        //printf("Removing node 0x%08x ...\n", page->pageNum);
         node->prev->next = node->next;
         node->next->prev = node->prev;
 
@@ -320,13 +294,6 @@ void rmNode(struct DLinkedList *list, struct PageTableEntry *page)
 
 }
 
-/**
- * Update the recency of when a page table entry was accessed
- * by moving it to the head of the linked list.
- * The list is organized such that the pages most recently
- * accessed are at the head, while the least recently accessed
- * is at the tail.
- */
 void updateRecency(struct DLinkedList *list, struct PageTableEntry *page)
 {
     struct Node *node = findNode(list, page);
@@ -336,7 +303,7 @@ void updateRecency(struct DLinkedList *list, struct PageTableEntry *page)
     }
 }
 
-// Returns the index of the least recently used page table entry.
+
 struct PageTableEntry *getLeastRecent(struct DLinkedList *list)
 {
     return list->trailer->prev->page;
@@ -347,14 +314,13 @@ void freeList(struct DLinkedList *list)
     while (list->numNodes != 0) {
         rmFront(list);
     }
-
-    //printf("Removing header and trailer sentinel nodes ...\n");
+    
     free(list->header);
     free(list->trailer);
-    //printf("Entire list successfully freed ...\n");
+    
 }
 
-// Extract the page number from the address by performing a 12 bit right-shift.
+
 unsigned int getPageNum(unsigned int address)
 {
     return address >> 12;
@@ -365,10 +331,9 @@ unsigned int getProcess(unsigned int address)
     return address & 0xF0000000;
 }
 
-// Print the recency list for debugging purposes.
+
 void printList(struct DLinkedList *list)
 {
-
     if (list->numNodes == 0) {
         printf("{EMPTY}");
     }
@@ -382,13 +347,11 @@ void printList(struct DLinkedList *list)
     printf("\n");
 }
 
-// Perform simulation with random page replacement.
+
 void rdm()
 {
-    // Seed random function with current time.
     srand(time(0));
-
-    // Create empty page table.
+    
     struct PageTable pageTable = initPageTable();
 
     unsigned int address, pageNum;
@@ -396,19 +359,17 @@ void rdm()
 
     struct PageTableEntry *page;
     int randIndex = 0;
-    // Iterate reading in events until end of file.
+    
     while (fscanf(traceFile, "%x %c", &address, &rw) != EOF) {
         numEvents++;
         pageNum = getPageNum(address);
 
-        // Print debugging information if requested to.
         if (debug) {
             printf("NumReads: %-8d NumWrites: %-8d\n\n", numReads, numWrites);
             printPageTable(pageTable);
             printf("NxtPN: 0x%08x RW: %c \n", pageNum, rw);
             printf("Enter x to exit. ");
 
-            // Option to terminate early.
             exitCh = getchar();
             if (exitCh == 'X' || exitCh == 'x') {
                 free(pageTable.entries);
@@ -416,24 +377,18 @@ void rdm()
             }
         }
         
-        // Return PTE with the passed pageNum.
         page = findEntry(pageTable, pageNum);
 
-        // PTE with pageNum is found.
         if (page != NULL) {
-            // PTE is simply read, continue to next event.
             if (rw == 'W') {
                 page->dirty = true;
             }
         }
-        // Otherwise, page fault occured.
+        
         else {
-            // If the page is not yet full
             if (!pageTable.isFull) {
-                // Fill next empty page table entry
                 pageTable.entries[pageTable.numEntries].pageNum = pageNum;
 
-                // If written to immediately, set dirty bit accordingly.
                 if (rw == 'W') {
                     pageTable.entries[pageTable.numEntries].dirty = true;
                 }
@@ -441,24 +396,20 @@ void rdm()
                 pageTable.numEntries++;
                 numReads++;
 
-                // Once page table is full, swap to replacement policy.
                 if (pageTable.numEntries == numFrames) {
                     pageTable.isFull = true;
                 }
             }
             else {
-                // Choose a random page to evict.
                 randIndex = rand() % numFrames;
                 
-                // If page was modified, disk write is required.
                 if (pageTable.entries[randIndex].dirty) {
                     numWrites++;
                 }
 
-                // Evict current page, read in new one.
                 pageTable.entries[randIndex].pageNum = pageNum;
                 numReads++;
-                // Set dirty bit according to new pages R/W.
+                
                 if (rw == 'R') {
                     pageTable.entries[randIndex].dirty = false;
                 }
