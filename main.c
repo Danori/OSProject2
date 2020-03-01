@@ -22,7 +22,7 @@ struct PageTable
 
 struct Node
 {
-    int index;
+    struct PageTableEntry *page;
     struct Node *prev;
     struct Node *next;
 };
@@ -37,29 +37,26 @@ struct DLinkedList
 // Page Table functions.
 struct PageTable initPageTable();
 void printPageTable(struct PageTable pageTable);
-struct PageTableEntry findEntry(struct PageTable pageTable, unsigned int pageNum);
+struct PageTableEntry *findEntry(struct PageTable pageTable, unsigned int pageNum);
 
 // Linked List functions.
 struct DLinkedList initLinkedList();
-void addFront(struct DLinkedList *list, int index);
+void addFront(struct DLinkedList *list, struct PageTableEntry *page);
 void rmFront(struct DLinkedList *list);
 void insertFront(struct DLinkedList *list, struct Node *node);
-void addBack(struct DLinkedList *list, int index);
+void addBack(struct DLinkedList *list, struct PageTableEntry *page);
 void rmBack(struct DLinkedList *list);
 void insertBack(struct DLinkedList *list, struct Node *node);
-struct Node *findNode(struct DLinkedList *list, int index);
-void rmNode(struct DLinkedList *list, int index);
-void updateRecency(struct DLinkedList *list, int index);
-int getLeastRecent(struct DLinkedList *list);
+struct Node *findNode(struct DLinkedList *list, struct PageTableEntry *page);
+void rmNode(struct DLinkedList *list, struct PageTableEntry *page);
+void updateRecency(struct DLinkedList *list, struct PageTableEntry *page);
+struct PageTableEntry *getLeastRecent(struct DLinkedList *list);
 void freeList(struct DLinkedList *list);
 void printList(struct DLinkedList *list);
 
 // Random helper functions.
 unsigned int getPageNum(unsigned int address);
 unsigned int getProcess(unsigned int address);
-
-// Functions exclusive to VMS.
-
 
 // Replacement Policy functions.
 void rdm();
@@ -162,21 +159,21 @@ void printPageTable(struct PageTable pageTable)
 }
 
 // Find the entry with the pass pageNum. If not found, page fault occured.
-unsigned int findEntry(struct PageTable pageTable, unsigned int pageNum)
+struct PageTableEntry *findEntry(struct PageTable pageTable, unsigned int pageNum)
 {
     for (int i = 0; i < numFrames; i++) {
         if (pageTable.entries[i].pageNum == pageNum) {
-            return i;
+            return &pageTable.entries[i];
         }
     }
 
-    return PAGE_FAULT;
+    return NULL;
 }
 
 // Create linked list, allocate header / trailer, link them.
 struct DLinkedList initLinkedList()
 {
-    printf("Adding header and trailer nodes ...\n");
+    //printf("Adding header and trailer nodes ...\n");
     struct DLinkedList list;
     
     list.header = malloc(sizeof(struct Node));
@@ -184,11 +181,11 @@ struct DLinkedList initLinkedList()
 
     list.numNodes = 0;
 
-    list.header->index = -1;
+    list.header->page = NULL;
     list.header->next = list.trailer;
     list.header->prev = NULL;
 
-    list.trailer->index = -1;
+    list.trailer->page = NULL;
     list.trailer->prev = list.header;
     list.trailer->next = NULL;
 
@@ -196,12 +193,12 @@ struct DLinkedList initLinkedList()
 }
 
 // Add a node at the head of the linked list.
-void addFront(struct DLinkedList *list, int index)
+void addFront(struct DLinkedList *list, struct PageTableEntry *page)
 {
-    printf("Adding node %d at front ...\n", index);
+    //printf("Adding node 0x%08x at front ...\n", page->pageNum);
     struct Node *newNode = malloc(sizeof(struct Node));
 
-    newNode->index = index;
+    newNode->page = page;
 
     newNode->prev = list->header;
     newNode->next = list->header->next;
@@ -216,7 +213,7 @@ void rmFront(struct DLinkedList *list)
     struct Node *node = list->header->next;
 
     if (node != list->trailer) {
-        printf("Removing node %d at front ...\n", node->index);
+        //printf("Removing 0x%08x at front ...\n", node->page->pageNum);
         node->prev->next = node->next;
         node->next->prev = node->prev;
 
@@ -229,7 +226,7 @@ void rmFront(struct DLinkedList *list)
 // Take a node from the list and reinsert it at the head of the list.
 void insertFront(struct DLinkedList *list, struct Node *node)
 {
-    printf("Inserting node %d at front ...\n", node->index);
+    //printf("Inserting node 0x%08x at front ...\n", node->page->pageNum);
 
     struct Node *prev = node->prev;
     struct Node *next = node->next;
@@ -242,12 +239,12 @@ void insertFront(struct DLinkedList *list, struct Node *node)
     list->header->next = node;
 }
 
-void addBack(struct DLinkedList *list, int index)
+void addBack(struct DLinkedList *list, struct PageTableEntry *page)
 {
-    printf("Adding node %d at back ...\n", index);
+    //printf("Adding node 0x%08x at back ...\n", page->pageNum);
     struct Node *newNode = malloc(sizeof(struct Node));
 
-    newNode->index = index;
+    newNode->page = page;
 
     newNode->next = list->trailer;
     newNode->prev = list->trailer->prev;
@@ -262,7 +259,7 @@ void rmBack(struct DLinkedList *list)
     struct Node *node = list->trailer->prev;
 
     if (node != list->header) {
-        printf("Removing node %d at back ...\n", node->index);
+        //printf("Removing node 0x%08x at back ...\n", node->page->pageNum);
         node->prev->next = node->next;
         node->next->prev = node->prev;
 
@@ -275,7 +272,7 @@ void rmBack(struct DLinkedList *list)
 // Insert the passed node to the back of the linked list.
 void insertBack(struct DLinkedList *list, struct Node *node)
 {
-    printf("Inserting node %d at back ...\n", node->index);
+    //printf("Inserting node 0x%08x at back ...\n", node->page->pageNum);
 
     struct Node *prev = node->prev;
     struct Node *next = node->next;
@@ -289,30 +286,30 @@ void insertBack(struct DLinkedList *list, struct Node *node)
 }
 
 // Find the node with the passed index in the linked list, return it.
-struct Node *findNode(struct DLinkedList *list, int index)
+struct Node *findNode(struct DLinkedList *list, struct PageTableEntry *page)
 {
     struct Node *currNode = list->header;
 
     while (currNode->next != list->trailer) {
         currNode = currNode->next;
 
-        if (currNode->index == index) {
-            printf("Found node %d ...\n", index);
+        if (currNode->page == page) {
+            //printf("Found node 0x%08x ...\n", page->pageNum);
             return currNode;
         }
     }
 
-    printf("Unable to find node %d ...\n", index);
+    //printf("Unable to find node 0x%08x ...\n", page->pageNum);
     return NULL;
 }
 
 // Remove a node with the passed index from the linked list.
-void rmNode(struct DLinkedList *list, int index)
+void rmNode(struct DLinkedList *list, struct PageTableEntry *page)
 {
-    struct Node *node = findNode(list, index);
+    struct Node *node = findNode(list, page);
 
     if (node != NULL) {
-        printf("Removing node %d ...\n", index);
+        //printf("Removing node 0x%08x ...\n", page->pageNum);
         node->prev->next = node->next;
         node->next->prev = node->prev;
 
@@ -330,9 +327,9 @@ void rmNode(struct DLinkedList *list, int index)
  * accessed are at the head, while the least recently accessed
  * is at the tail.
  */
-void updateRecency(struct DLinkedList *list, int index)
+void updateRecency(struct DLinkedList *list, struct PageTableEntry *page)
 {
-    struct Node *node = findNode(list, index);
+    struct Node *node = findNode(list, page);
 
     if (node != NULL) {
         insertFront(list, node);
@@ -340,9 +337,9 @@ void updateRecency(struct DLinkedList *list, int index)
 }
 
 // Returns the index of the least recently used page table entry.
-int getLeastRecent(struct DLinkedList *list)
+struct PageTableEntry *getLeastRecent(struct DLinkedList *list)
 {
-    return list->trailer->prev->index;
+    return list->trailer->prev->page;
 }
 
 void freeList(struct DLinkedList *list)
@@ -351,10 +348,10 @@ void freeList(struct DLinkedList *list)
         rmFront(list);
     }
 
-    printf("Removing header and trailer sentinel nodes ...\n");
+    //printf("Removing header and trailer sentinel nodes ...\n");
     free(list->header);
     free(list->trailer);
-    printf("Entire list successfully freed ...\n");
+    //printf("Entire list successfully freed ...\n");
 }
 
 // Extract the page number from the address by performing a 12 bit right-shift.
@@ -371,7 +368,6 @@ unsigned int getProcess(unsigned int address)
 // Print the recency list for debugging purposes.
 void printList(struct DLinkedList *list)
 {
-    printf("LINKED LIST\n");
 
     if (list->numNodes == 0) {
         printf("{EMPTY}");
@@ -381,7 +377,7 @@ void printList(struct DLinkedList *list)
 
     while (currNode->next != list->trailer) {
         currNode = currNode->next;
-        printf("%d ", currNode->index);
+        printf("0x%08x ", currNode->page->pageNum);
     }
     printf("\n");
 }
@@ -398,7 +394,8 @@ void rdm()
     unsigned int address, pageNum;
     char rw, exitCh;
 
-    int index = 0, randIndex = 0;
+    struct PageTableEntry *page;
+    int randIndex = 0;
     // Iterate reading in events until end of file.
     while (fscanf(traceFile, "%x %c", &address, &rw) != EOF) {
         numEvents++;
@@ -419,18 +416,14 @@ void rdm()
             }
         }
         
-        // Return index of the PTE with the passed pageNum.
-        index = findEntry(pageTable, pageNum);
+        // Return PTE with the passed pageNum.
+        page = findEntry(pageTable, pageNum);
 
         // PTE with pageNum is found.
-        if (index != PAGE_FAULT) {
+        if (page != NULL) {
             // PTE is simply read, continue to next event.
-            if (rw == 'R') {
-                continue;
-            }
-            // Otherwise, set dirty bit, since PTE was written to.
-            else {
-                pageTable.entries[index].dirty = true;
+            if (rw == 'W') {
+                page->dirty = true;
             }
         }
         // Otherwise, page fault occured.
@@ -487,7 +480,7 @@ void lru()
     unsigned int address, pageNum;
     char rw, exitCh;
 
-    int index = 0, pageToRemoveIndex = 0;
+    struct PageTableEntry *page, *pageToRemove;
     while (fscanf(traceFile, "%x %c", &address, &rw) != EOF) {
         numEvents++;
         pageNum = getPageNum(address);
@@ -495,6 +488,7 @@ void lru()
         if (debug) {
             printf("NumReads: %-8d NumWrites: %-8d\n\n", numReads, numWrites);
             printPageTable(pageTable);
+            printf("RECENCY LIST\n");
             printList(&recencyList);
             printf("NxtPN: 0x%08x RW: %c\n", pageNum, rw);
             printf("Enter x to exit. ");
@@ -507,27 +501,24 @@ void lru()
             }
         }
         
-        index = findEntry(pageTable, pageNum);
+        page = findEntry(pageTable, pageNum);
 
-        if (index != PAGE_FAULT) {
-            if (rw == 'R') {
-                continue;
-            }
-            else {
-                pageTable.entries[index].dirty = true;
-            }
+        if (page != NULL) {
+            updateRecency(&recencyList, page);
 
-            updateRecency(&recencyList, index);
+            if (rw == 'W') {
+                page->dirty = true;
+            }
         }
         else {
             if (!pageTable.isFull) {
                 pageTable.entries[pageTable.numEntries].pageNum = pageNum;
 
-                addFront(&recencyList, pageTable.numEntries);
-
                 if (rw == 'W') {
                     pageTable.entries[pageTable.numEntries].dirty = true;
                 }
+
+                addFront(&recencyList, &pageTable.entries[pageTable.numEntries]);
 
                 pageTable.numEntries++;
                 numReads++;
@@ -537,22 +528,22 @@ void lru()
                 }
             }
             else {
-                pageToRemoveIndex = getLeastRecent(&recencyList);
+                pageToRemove = getLeastRecent(&recencyList);
                 
-                if (pageTable.entries[pageToRemoveIndex].dirty) {
+                if (pageToRemove->dirty) {
                     numWrites++;
                 }
 
-                pageTable.entries[pageToRemoveIndex].pageNum = pageNum;
+                pageToRemove->pageNum = pageNum;
                 numReads++;
-                if (rw == 'R') {
-                    pageTable.entries[pageToRemoveIndex].dirty = false;
+                if (rw == 'W') {
+                    pageToRemove->dirty = true;
                 }
                 else {
-                    pageTable.entries[pageToRemoveIndex].dirty = true;
+                    pageToRemove->dirty = false;
                 }
 
-                updateRecency(&recencyList, pageToRemoveIndex);
+                updateRecency(&recencyList, pageToRemove);
             }
         }
     }
@@ -574,28 +565,29 @@ void vms()
     struct DLinkedList clean = initLinkedList();
     struct DLinkedList dirty = initLinkedList();
 
-    unsigned int address, pageNum, process;
+    unsigned int address, pageNum, process, rss = numFrames / 2;
     char rw, exitCh;
-
-    int index = 0, pageToRemoveIndex = 0, rss = numFrames / 2,
-    numAFrames = 0, numBFrames = 0;
     bool isProcessA;
+
+    struct PageTableEntry *page, *pageToRemove;
     while (fscanf(traceFile, "%x %c", &address, &rw) != EOF) {
         numEvents++;
         pageNum = getPageNum(address);
         process = getProcess(address);
-
         isProcessA = process != PROCESS_B ? true : false;
 
         if (debug) {
             printf("NumReads: %-8d NumWrites: %-8d\n\n", numReads, numWrites);
             printPageTable(pageTable);
+            printf("A FIFO\n");
             printList(&afifo);
+            printf("B FIFO\n");
             printList(&bfifo);
+            printf("CLEAN LIST\n");
             printList(&clean);
+            printf("DIRTY LIST\n");
             printList(&dirty);
             printf("NxtPN: 0x%08x RW: %c\n", pageNum, rw);
-            printf("Process: 0x%08x\n", process);
             printf("Enter x to exit. ");
 
             exitCh = getchar();
@@ -609,33 +601,185 @@ void vms()
             }
         }
         
-        struct Node *node;
-        if (isProcessA) {
-            node = findNode(&afifo, pageNum);
+        page = findEntry(pageTable, pageNum);
 
+        struct Node *node;
+        if (page != NULL) {
+            node = findNode(&dirty, page);
             if (node != NULL) {
-                continue;
+                rmNode(&dirty, page);
+            }
+
+            node = findNode(&clean, page);
+            if (node != NULL) {
+                rmNode(&clean, page);
+            }
+
+            if (isProcessA) {
+                node = findNode(&afifo, page);
+
+                if (node != NULL) {
+                    if (rw == 'W') {
+                        node->page->dirty = true;
+                    }
+                }
+                else {
+                    addFront(&afifo, page);
+
+                    if (afifo.numNodes >= rss) {
+                        pageToRemove = getLeastRecent(&afifo);
+                        rmNode(&afifo, pageToRemove);
+
+                        if (pageToRemove->dirty) {
+                            addFront(&dirty, pageToRemove);
+                        }
+                        else {
+                            addFront(&clean, pageToRemove);
+                        }
+
+                    }
+                }
             }
             else {
-                addFront(&afifo, pageNum);
+                node = findNode(&bfifo, page);
 
-                if (afifo.numNodes > rss) {
-                    struct Node* nodeToRemove = afifo.trailer->prev;
+                if (node != NULL) {
+                    if (rw == 'W') {
+                        node->page->dirty = true;
+                    }
+                }
+                else {
+                    addFront(&bfifo, page);
 
+                    if (bfifo.numNodes >= rss) {
+                        pageToRemove = getLeastRecent(&bfifo);
+                        rmNode(&bfifo, pageToRemove);
 
+                        if (pageToRemove->dirty) {
+                            addFront(&dirty, pageToRemove);
+                        }
+                        else {
+                            addFront(&clean, pageToRemove);
+                        }
 
-                    rmBack(&)
+                    }
                 }
             }
         }
         else {
-            node = findNode(&bfifo, pageNum);
+            if (!pageTable.isFull) {
+                pageTable.entries[pageTable.numEntries].pageNum = pageNum;
 
-            if (node != NULL) {
-                continue;
+                if (rw == 'W') {
+                    pageTable.entries[pageTable.numEntries].dirty = true;
+                }
+
+                if (isProcessA) {
+                    if (afifo.numNodes >= rss) {
+                        pageToRemove = getLeastRecent(&afifo);
+                        rmNode(&afifo, pageToRemove);
+
+                        if (pageToRemove->dirty) {
+                            addFront(&dirty, pageToRemove);
+                        }
+                        else {
+                            addFront(&clean, pageToRemove);
+                        }
+                    }
+                    addFront(&afifo, &pageTable.entries[pageTable.numEntries]);
+                }
+                else {
+                    if (bfifo.numNodes >= rss) {
+                        pageToRemove = getLeastRecent(&bfifo);
+                        rmNode(&bfifo, pageToRemove);
+
+                        if (pageToRemove->dirty) {
+                            addFront(&dirty, pageToRemove);
+                        }
+                        else {
+                            addFront(&clean, pageToRemove);
+                        }
+                    }
+                    addFront(&bfifo, &pageTable.entries[pageTable.numEntries]);
+                }
+
+                pageTable.numEntries++;
+                numReads++;
+
+                if (pageTable.numEntries == numFrames) {
+                    pageTable.isFull = true;
+                }
             }
             else {
+                if (isProcessA) {
+                    if (clean.numNodes > 0) {
+                        pageToRemove = getLeastRecent(&clean);
+                        rmNode(&clean, pageToRemove);
+                    } 
+                    else if (dirty.numNodes > 0) {
+                        pageToRemove = getLeastRecent(&dirty);
+                        rmNode(&dirty, pageToRemove); 
+                    }
+                    else {
+                        pageToRemove = getLeastRecent(&afifo);
+                        rmNode(&afifo, pageToRemove);
+                    }
 
+                    addFront(&afifo, pageToRemove);
+
+                    if (afifo.numNodes > rss) {
+                        page = getLeastRecent(&afifo);
+                        rmBack(&afifo);
+
+                        if (page->dirty) {
+                            addFront(&dirty, page);
+                        }
+                        else {
+                            addFront(&clean, page);
+                        }
+                    }
+                }
+                else {
+                    if (clean.numNodes > 0) {
+                        pageToRemove = getLeastRecent(&clean);
+                        rmNode(&clean, pageToRemove);
+                    }
+                    else if (dirty.numNodes > 0) {
+                        pageToRemove = getLeastRecent(&dirty);
+                        rmNode(&dirty, pageToRemove);
+                    }
+                    else {
+                        pageToRemove = getLeastRecent(&bfifo);
+                        rmNode(&bfifo, pageToRemove);
+                    }
+
+                    addFront(&bfifo, pageToRemove);
+
+                    if (bfifo.numNodes > rss) {
+                        page = getLeastRecent(&bfifo);
+                        rmBack(&bfifo);
+
+                        if (page->dirty) {
+                            addFront(&dirty, page);
+                        }
+                        else {
+                            addFront(&clean, page);
+                        }
+                    }
+                }
+
+                if (pageToRemove->dirty) {
+                    numWrites++;
+                }
+
+                pageToRemove->pageNum = pageNum;
+                numReads++;
+                if (rw == 'W') {
+                    pageToRemove->dirty = true;
+                }
+                else {
+                    pageToRemove->dirty = false;
+                }
             }
         }
     }
