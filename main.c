@@ -611,7 +611,6 @@ void fifo()
     }
 
     free(pageTable.entries);
-
 }
 
 void vms()
