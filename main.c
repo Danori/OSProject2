@@ -536,6 +536,81 @@ void lru()
 
 void fifo()
 {
+    struct PageTable pageTable = initPageTable();
+
+    unsigned int address, pageNum, nextPageToRemove = 0;
+    char rw, exitCh;
+
+    struct PageTableEntry *page, *pageToRemove;
+    while (fscanf(traceFile, "%x %c", &address, &rw) != EOF) {
+        numEvents++;
+        pageNum = getPageNum(address);
+
+        if (debug) {
+            printf("NumReads: %-8d NumWrites: %-8d\n\n", numReads, numWrites);
+            printPageTable(pageTable);
+            printf("NxtPN: 0x%08x RW: %c\n", pageNum, rw);
+            printf("Enter x to exit. ");
+
+            exitCh = getchar();
+            if (exitCh == 'X' || exitCh == 'x') {
+                free(pageTable.entries);
+                exit(0);
+            }
+        }
+
+        page = findEntry(pageTable, pageNum);
+
+        // If its found, update its dirty bit if its written to.
+        if (page != NULL) {
+            if (rw == 'W') {
+                page->dirty = true;
+            }
+        }
+        // Otherwise, page fault occured.
+        else {
+            // While page table is not full, fill entry by entry.
+            if (!pageTable.isFull) {
+                pageTable.entries[pageTable.numEntries].pageNum = pageNum;
+
+                if (rw == 'W') {
+                    pageTable.entries[pageTable.numEntries].dirty = true;
+                }
+
+                pageTable.numEntries++;
+                numReads++;
+
+                // Swap to replacement policy once pageTable is full.
+                if (pageTable.numEntries == numFrames) {
+                    pageTable.isFull = true;
+                }
+            }
+            // Replace pages at random.
+            else {
+                if (pageTable.entries[nextPageToRemove].dirty) {
+                    numWrites++;
+                }
+
+                pageTable.entries[nextPageToRemove].pageNum = pageNum;
+                numReads++;
+                
+                if (rw == 'R') {
+                    pageTable.entries[nextPageToRemove].dirty = false;
+                }
+                else {
+                    pageTable.entries[nextPageToRemove].dirty = true;
+                }
+
+                nextPageToRemove++;
+                
+                if (nextPageToRemove == numFrames) {
+                    nextPageToRemove = 0;
+                }
+            }
+        }
+    }
+
+    free(pageTable.entries);
 
 }
 
