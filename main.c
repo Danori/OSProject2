@@ -132,7 +132,8 @@ struct PageTable initPageTable()
     struct PageTable pageTable;
     pageTable.entries = malloc(numFrames * sizeof(struct PageTableEntry));
 
-    for (int i = 0; i < numFrames; i++) {
+    int i;
+    for (i = 0; i < numFrames; i++) {
         pageTable.entries[i].pageNum = -1;
         pageTable.entries[i].dirty = false;
     }
@@ -150,7 +151,8 @@ void printPageTable(struct PageTable pageTable)
     printf("numEntries: %-6d isFull: %d\n", pageTable.numEntries, pageTable.isFull);
     printf("============================\n");
     printf("Entry: PageNumber:    Dirty:\n");
-    for (int i = 0; i < numFrames; i++) {
+    int i;
+    for (i = 0; i < numFrames; i++) {
         printf("%-6d 0x%08x     %d\n", i, pageTable.entries[i].pageNum, pageTable.entries[i].dirty);
     }
     printf("============================\n");
@@ -159,7 +161,8 @@ void printPageTable(struct PageTable pageTable)
 // Find the PTE with the passed pageNum. If not found, returns NULL.
 struct PageTableEntry *findEntry(struct PageTable pageTable, unsigned int pageNum)
 {
-    for (int i = 0; i < numFrames; i++) {
+    int i;
+    for (i = 0; i < numFrames; i++) {
         if (pageTable.entries[i].pageNum == pageNum) {
             return &pageTable.entries[i];
         }
@@ -462,11 +465,14 @@ void lru()
     unsigned int address, pageNum;
     char rw, exitCh;
 
+    // Iterate through trace file reading in address and R / W until end of file.
     struct PageTableEntry *page, *pageToRemove;
     while (fscanf(traceFile, "%x %c", &address, &rw) != EOF) {
+        // Keep trace of number of events. Should be 1M at end of execution.
         numEvents++;
         pageNum = getPageNum(address);
 
+        // Print debug info and pause every iteration if requested.
         if (debug) {
             printf("NumReads: %-8d NumWrites: %-8d\n\n", numReads, numWrites);
             printPageTable(pageTable);
@@ -483,8 +489,10 @@ void lru()
             }
         }
         
+        // Find the page with pageNum within the page table.
         page = findEntry(pageTable, pageNum);
 
+        // If its found, update its recency and modify its dirty bit accordingly.
         if (page != NULL) {
             updateRecency(&recencyList, page);
 
@@ -492,30 +500,39 @@ void lru()
                 page->dirty = true;
             }
         }
+        // Otherwise, page fault occured.
         else {
+            // While page table isnt full.
             if (!pageTable.isFull) {
+
+                // Add page to next available entry.
                 pageTable.entries[pageTable.numEntries].pageNum = pageNum;
 
+                // Set dirty bit accordingly.
                 if (rw == 'W') {
                     pageTable.entries[pageTable.numEntries].dirty = true;
                 }
 
+                // Update recency list to add new page to the front.
                 addFront(&recencyList, &pageTable.entries[pageTable.numEntries]);
 
                 pageTable.numEntries++;
                 numReads++;
 
+                // Swap to replacement policy once full.
                 if (pageTable.numEntries == numFrames) {
                     pageTable.isFull = true;
                 }
             }
             else {
+                // Remove to page which was accessly least recently. (back of recency list)
                 pageToRemove = getLeastRecent(&recencyList);
                 
                 if (pageToRemove->dirty) {
                     numWrites++;
                 }
 
+                // Place new page into page table, set data members accordingly.
                 pageToRemove->pageNum = pageNum;
                 numReads++;
                 if (rw == 'W') {
@@ -525,6 +542,7 @@ void lru()
                     pageToRemove->dirty = false;
                 }
 
+                // Update recency list to move new page to front.
                 updateRecency(&recencyList, pageToRemove);
             }
         }
@@ -534,6 +552,7 @@ void lru()
     freeList(&recencyList);
 }
 
+// First-in-first-out replacement policy simulation.
 void fifo()
 {
     struct PageTable pageTable = initPageTable();
@@ -541,11 +560,14 @@ void fifo()
     unsigned int address, pageNum, nextPageToRemove = 0;
     char rw, exitCh;
 
+    // Iterate through trace file reading in address and R / W until end of file.
     struct PageTableEntry *page, *pageToRemove;
     while (fscanf(traceFile, "%x %c", &address, &rw) != EOF) {
+        // Keep trace of number of events. Should be 1M at end of execution.
         numEvents++;
         pageNum = getPageNum(address);
 
+        // Print debug info and pause every iteration if requested.
         if (debug) {
             printf("NumReads: %-8d NumWrites: %-8d\n\n", numReads, numWrites);
             printPageTable(pageTable);
@@ -585,8 +607,13 @@ void fifo()
                     pageTable.isFull = true;
                 }
             }
-            // Replace pages at random.
             else {
+                /**
+                 * Because we placed pages from index 0 to numFrames-1, we can
+                 * simply keep track of an index variable and any time we need
+                 * to remove a page, simply increment the index variable, which
+                 * will preserve the FIFO property.
+                 */
                 if (pageTable.entries[nextPageToRemove].dirty) {
                     numWrites++;
                 }
@@ -594,11 +621,11 @@ void fifo()
                 pageTable.entries[nextPageToRemove].pageNum = pageNum;
                 numReads++;
                 
-                if (rw == 'R') {
-                    pageTable.entries[nextPageToRemove].dirty = false;
+                if (rw == 'W') {
+                    pageTable.entries[nextPageToRemove].dirty = true;
                 }
                 else {
-                    pageTable.entries[nextPageToRemove].dirty = true;
+                    pageTable.entries[nextPageToRemove].dirty = false;
                 }
 
                 nextPageToRemove++;
@@ -613,6 +640,7 @@ void fifo()
     free(pageTable.entries);
 }
 
+// VMS replacement policy simulation.
 void vms()
 {
     struct PageTable pageTable = initPageTable();
@@ -630,8 +658,11 @@ void vms()
         numEvents++;
         pageNum = getPageNum(address);
         process = getProcess(address);
+
+        // Check which process the current page belongs to.
         isProcessA = process != PROCESS_B ? true : false;
 
+        // Print debug info and pause every iteration if requested.
         if (debug) {
             printf("NumReads: %-8d NumWrites: %-8d\n\n", numReads, numWrites);
             printPageTable(pageTable);
@@ -657,10 +688,13 @@ void vms()
             }
         }
         
+        // Find the page with pageNum within the page table.
         page = findEntry(pageTable, pageNum);
 
         struct Node *node;
+        // If the page is found, page hit.
         if (page != NULL) {
+            // Remove the page from clean or dirty if its there.
             node = findNode(&dirty, page);
             if (node != NULL) {
                 rmNode(&dirty, page);
@@ -671,17 +705,22 @@ void vms()
                 rmNode(&clean, page);
             }
 
+            // For process A.
             if (isProcessA) {
+                // Find the page in its FIFO list
                 node = findNode(&afifo, page);
 
+                // If found, update its dirty bit if required.
                 if (node != NULL) {
                     if (rw == 'W') {
                         node->page->dirty = true;
                     }
                 }
+                // If not found, then needs to be added to process A FIFO list.
                 else {
                     addFront(&afifo, page);
 
+                    // If adding the page makes it exceed its RSS, remove first-in page, and add it to dirty or clean.
                     if (afifo.numNodes >= rss) {
                         pageToRemove = getLeastRecent(&afifo);
                         rmNode(&afifo, pageToRemove);
@@ -696,6 +735,7 @@ void vms()
                     }
                 }
             }
+            // Similar to above for process B.
             else {
                 node = findNode(&bfifo, page);
 
@@ -722,16 +762,21 @@ void vms()
                 }
             }
         }
+        // Otherwise, page fault.
         else {
             if (!pageTable.isFull) {
+                // While page table is not full, add page to next available entry.
                 pageTable.entries[pageTable.numEntries].pageNum = pageNum;
 
                 if (rw == 'W') {
                     pageTable.entries[pageTable.numEntries].dirty = true;
                 }
 
+                // If adding the page exceeds a process' RSS, remove first-in page, and add it to dirty or clean.
                 if (isProcessA) {
-                    if (afifo.numNodes >= rss) {
+                    addFront(&afifo, &pageTable.entries[pageTable.numEntries]);
+
+                    if (afifo.numNodes > rss) {
                         pageToRemove = getLeastRecent(&afifo);
                         rmNode(&afifo, pageToRemove);
 
@@ -742,10 +787,11 @@ void vms()
                             addFront(&clean, pageToRemove);
                         }
                     }
-                    addFront(&afifo, &pageTable.entries[pageTable.numEntries]);
                 }
                 else {
-                    if (bfifo.numNodes >= rss) {
+                    addFront(&bfifo, &pageTable.entries[pageTable.numEntries]);
+
+                    if (bfifo.numNodes > rss) {
                         pageToRemove = getLeastRecent(&bfifo);
                         rmNode(&bfifo, pageToRemove);
 
@@ -756,26 +802,29 @@ void vms()
                             addFront(&clean, pageToRemove);
                         }
                     }
-                    addFront(&bfifo, &pageTable.entries[pageTable.numEntries]);
                 }
 
                 pageTable.numEntries++;
                 numReads++;
 
+                // Swap to page replacement once page table is full.
                 if (pageTable.numEntries == numFrames) {
                     pageTable.isFull = true;
                 }
             }
             else {
                 if (isProcessA) {
+                    // First remove from clean if able.
                     if (clean.numNodes > 0) {
                         pageToRemove = getLeastRecent(&clean);
                         rmNode(&clean, pageToRemove);
                     } 
+                    // Otherwise, remove from dirty.
                     else if (dirty.numNodes > 0) {
                         pageToRemove = getLeastRecent(&dirty);
                         rmNode(&dirty, pageToRemove); 
                     }
+                    // Otherwise, remove their own page.
                     else {
                         pageToRemove = getLeastRecent(&afifo);
                         rmNode(&afifo, pageToRemove);
@@ -795,6 +844,7 @@ void vms()
                         }
                     }
                 }
+                // Similar to above for process B.
                 else {
                     if (clean.numNodes > 0) {
                         pageToRemove = getLeastRecent(&clean);

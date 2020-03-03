@@ -1,4 +1,4 @@
 all: memsim
 
 memsim:
-	gcc -o memsim *.c
+	gcc -o memsim main.c
