@@ -6,25 +6,25 @@
 
 #define PROCESS_B 0x30000000
 
-struct PageTableEntry
+typedef struct PageTableEntry_
 {
     int pageNum;
     bool dirty;
-};
+} PageTableEntry;
 
-struct PageTable
+typedef struct PageTable_
 {
-    struct PageTableEntry *entries;
+    PageTableEntry *entries;
     int numEntries;
     bool isFull;
-};
+} PageTable;
 
-struct Node
+typedef struct Node_
 {
-    struct PageTableEntry *page;
-    struct Node *prev;
-    struct Node *next;
-};
+    PageTableEntry *page;
+    struct Node_ *prev;
+    struct Node_ *next;
+} Node;
 
 /**
  * Linked list used to keep track of FIFO / recency.
@@ -32,32 +32,32 @@ struct Node
  * most recently, while those in the back are candidates
  * for eviction.
  */
-struct DLinkedList
+typedef struct DLinkedList_
 {
     int numNodes;
-    struct Node *header;
-    struct Node *trailer;
-};
+    Node *header;
+    Node *trailer;
+} DLinkedList;
 
 // Page table functions.
-struct PageTable initPageTable();
-void printPageTable(struct PageTable pageTable);
-struct PageTableEntry *findEntry(struct PageTable pageTable, unsigned int pageNum);
+PageTable initPageTable();
+void printPageTable(PageTable pageTable);
+PageTableEntry *findEntry(PageTable pageTable, unsigned int pageNum);
 
 // Linked list functions.
-struct DLinkedList initLinkedList();
-void addFront(struct DLinkedList *list, struct PageTableEntry *page);
-void rmFront(struct DLinkedList *list);
-void insertFront(struct DLinkedList *list, struct Node *node);
-void addBack(struct DLinkedList *list, struct PageTableEntry *page);
-void rmBack(struct DLinkedList *list);
-void insertBack(struct DLinkedList *list, struct Node *node);
-struct Node *findNode(struct DLinkedList *list, struct PageTableEntry *page);
-void rmNode(struct DLinkedList *list, struct PageTableEntry *page);
-void updateRecency(struct DLinkedList *list, struct PageTableEntry *page);
-struct PageTableEntry *getLeastRecent(struct DLinkedList *list);
-void freeList(struct DLinkedList *list);
-void printList(struct DLinkedList *list);
+DLinkedList initLinkedList();
+void addFront(DLinkedList *list, PageTableEntry *page);
+void rmFront(DLinkedList *list);
+void insertFront(DLinkedList *list, Node *node);
+void addBack(DLinkedList *list, PageTableEntry *page);
+void rmBack(DLinkedList *list);
+void insertBack(DLinkedList *list, Node *node);
+Node *findNode(DLinkedList *list, PageTableEntry *page);
+void rmNode(DLinkedList *list, PageTableEntry *page);
+void updateRecency(DLinkedList *list, PageTableEntry *page);
+PageTableEntry *getLeastRecent(DLinkedList *list);
+void freeList(DLinkedList *list);
+void printList(DLinkedList *list);
 
 // Helper functions.
 unsigned int getPageNum(unsigned int address);
@@ -127,10 +127,10 @@ int main(int argc, char *argv[])
 }
 
 // Initialize empty page table of size numFrames.
-struct PageTable initPageTable()
+PageTable initPageTable()
 {
-    struct PageTable pageTable;
-    pageTable.entries = malloc(numFrames * sizeof(struct PageTableEntry));
+    PageTable pageTable;
+    pageTable.entries = malloc(numFrames * sizeof(PageTableEntry));
 
     int i;
     for (i = 0; i < numFrames; i++) {
@@ -145,7 +145,7 @@ struct PageTable initPageTable()
 }
 
 // Print page table for debugging.
-void printPageTable(struct PageTable pageTable)
+void printPageTable(PageTable pageTable)
 {
     printf("PAGE TABLE\n");
     printf("numEntries: %-6d isFull: %d\n", pageTable.numEntries, pageTable.isFull);
@@ -159,7 +159,7 @@ void printPageTable(struct PageTable pageTable)
 }
 
 // Find the PTE with the passed pageNum. If not found, returns NULL.
-struct PageTableEntry *findEntry(struct PageTable pageTable, unsigned int pageNum)
+PageTableEntry *findEntry(PageTable pageTable, unsigned int pageNum)
 {
     int i;
     for (i = 0; i < numFrames; i++) {
@@ -172,13 +172,12 @@ struct PageTableEntry *findEntry(struct PageTable pageTable, unsigned int pageNu
 }
 
 // Initialize an empty linked list with sentinel nodes.
-struct DLinkedList initLinkedList()
+DLinkedList initLinkedList()
 {
+    DLinkedList list;
     
-    struct DLinkedList list;
-    
-    list.header = malloc(sizeof(struct Node));
-    list.trailer = malloc(sizeof(struct Node));
+    list.header = malloc(sizeof(Node));
+    list.trailer = malloc(sizeof(Node));
 
     list.numNodes = 0;
 
@@ -194,10 +193,10 @@ struct DLinkedList initLinkedList()
 }
 
 // Add the passed PTE to the front of the passed linked list.
-void addFront(struct DLinkedList *list, struct PageTableEntry *page)
+void addFront(DLinkedList *list, PageTableEntry *page)
 {
     
-    struct Node *newNode = malloc(sizeof(struct Node));
+    Node *newNode = malloc(sizeof(Node));
 
     newNode->page = page;
 
@@ -210,9 +209,9 @@ void addFront(struct DLinkedList *list, struct PageTableEntry *page)
 }
 
 // Remove the PTE at the front of the passed linked list.
-void rmFront(struct DLinkedList *list)
+void rmFront(DLinkedList *list)
 {
-    struct Node *node = list->header->next;
+    Node *node = list->header->next;
 
     if (node != list->trailer) {
         
@@ -226,10 +225,10 @@ void rmFront(struct DLinkedList *list)
 }
 
 // Insert the passed node within the passed linked list to the front of the list.
-void insertFront(struct DLinkedList *list, struct Node *node)
+void insertFront(DLinkedList *list, Node *node)
 {
-    struct Node *prev = node->prev;
-    struct Node *next = node->next;
+    Node *prev = node->prev;
+    Node *next = node->next;
 
     prev->next = next;
     next->prev = prev;
@@ -240,9 +239,9 @@ void insertFront(struct DLinkedList *list, struct Node *node)
 }
 
 // Add the passed PTE to the back of the passed linked list.
-void addBack(struct DLinkedList *list, struct PageTableEntry *page)
+void addBack(DLinkedList *list, PageTableEntry *page)
 {
-    struct Node *newNode = malloc(sizeof(struct Node));
+    Node *newNode = malloc(sizeof(Node));
 
     newNode->page = page;
 
@@ -255,9 +254,9 @@ void addBack(struct DLinkedList *list, struct PageTableEntry *page)
 }
 
 // Remove the PTE at the back of the linked list.
-void rmBack(struct DLinkedList *list)
+void rmBack(DLinkedList *list)
 {
-    struct Node *node = list->trailer->prev;
+    Node *node = list->trailer->prev;
 
     if (node != list->header) {
         node->prev->next = node->next;
@@ -270,10 +269,10 @@ void rmBack(struct DLinkedList *list)
 }
 
 // Insert the passed node within the passed linked list to the back of the list.
-void insertBack(struct DLinkedList *list, struct Node *node)
+void insertBack(DLinkedList *list, Node *node)
 {
-    struct Node *prev = node->prev;
-    struct Node *next = node->next;
+    Node *prev = node->prev;
+    Node *next = node->next;
 
     prev->next = next;
     next->prev = prev;
@@ -284,9 +283,9 @@ void insertBack(struct DLinkedList *list, struct Node *node)
 }
 
 // Find and return the node containing the passed PTE. If not found, return NULL.
-struct Node *findNode(struct DLinkedList *list, struct PageTableEntry *page)
+Node *findNode(DLinkedList *list, PageTableEntry *page)
 {
-    struct Node *currNode = list->header;
+    Node *currNode = list->header;
 
     while (currNode->next != list->trailer) {
         currNode = currNode->next;
@@ -301,9 +300,9 @@ struct Node *findNode(struct DLinkedList *list, struct PageTableEntry *page)
 }
 
 // Remove the node with the passed PTE from the passed list.
-void rmNode(struct DLinkedList *list, struct PageTableEntry *page)
+void rmNode(DLinkedList *list, PageTableEntry *page)
 {
-    struct Node *node = findNode(list, page);
+    Node *node = findNode(list, page);
 
     if (node != NULL) {
         node->prev->next = node->next;
@@ -317,9 +316,9 @@ void rmNode(struct DLinkedList *list, struct PageTableEntry *page)
 }
 
 // Used for LRU. Once a page is accessed, move it to the front of the list.
-void updateRecency(struct DLinkedList *list, struct PageTableEntry *page)
+void updateRecency(DLinkedList *list, PageTableEntry *page)
 {
-    struct Node *node = findNode(list, page);
+    Node *node = findNode(list, page);
 
     if (node != NULL) {
         insertFront(list, node);
@@ -327,13 +326,13 @@ void updateRecency(struct DLinkedList *list, struct PageTableEntry *page)
 }
 
 // Return the PTE which is next candidate for eviction. If list is empty, returns NULL.
-struct PageTableEntry *getLeastRecent(struct DLinkedList *list)
+PageTableEntry *getLeastRecent(DLinkedList *list)
 {
     return list->trailer->prev->page;
 }
 
 // Free all the nodes within the passed list from memory.
-void freeList(struct DLinkedList *list)
+void freeList(DLinkedList *list)
 {
     while (list->numNodes != 0) {
         rmFront(list);
@@ -358,13 +357,13 @@ unsigned int getProcess(unsigned int address)
 }
 
 // Print the passed list for debugging purposes.
-void printList(struct DLinkedList *list)
+void printList(DLinkedList *list)
 {
     if (list->numNodes == 0) {
         printf("{EMPTY}");
     }
 
-    struct Node *currNode = list->header;
+    Node *currNode = list->header;
 
     while (currNode->next != list->trailer) {
         currNode = currNode->next;
@@ -378,12 +377,12 @@ void rdm()
 {
     // Seed random function for random replacement.
     srand(time(0));
-    struct PageTable pageTable = initPageTable();
+    PageTable pageTable = initPageTable();
 
     // Some function variables.
     unsigned int address, pageNum, randIndex = 0;
     char rw, exitCh;
-    struct PageTableEntry *page;
+    PageTableEntry *page;
 
     // Iterate through trace file reading in address and R / W until end of file.
     while (fscanf(traceFile, "%x %c", &address, &rw) != EOF) {
@@ -459,14 +458,14 @@ void rdm()
 // Least recenctly used replacement policy simulation.
 void lru()
 {
-    struct PageTable pageTable = initPageTable();
-    struct DLinkedList recencyList = initLinkedList();
+    PageTable pageTable = initPageTable();
+    DLinkedList recencyList = initLinkedList();
 
     unsigned int address, pageNum;
     char rw, exitCh;
 
     // Iterate through trace file reading in address and R / W until end of file.
-    struct PageTableEntry *page, *pageToRemove;
+    PageTableEntry *page, *pageToRemove;
     while (fscanf(traceFile, "%x %c", &address, &rw) != EOF) {
         // Keep trace of number of events. Should be 1M at end of execution.
         numEvents++;
@@ -555,13 +554,13 @@ void lru()
 // First-in-first-out replacement policy simulation.
 void fifo()
 {
-    struct PageTable pageTable = initPageTable();
+    PageTable pageTable = initPageTable();
 
     unsigned int address, pageNum, nextPageToRemove = 0;
     char rw, exitCh;
 
     // Iterate through trace file reading in address and R / W until end of file.
-    struct PageTableEntry *page, *pageToRemove;
+    PageTableEntry *page, *pageToRemove;
     while (fscanf(traceFile, "%x %c", &address, &rw) != EOF) {
         // Keep trace of number of events. Should be 1M at end of execution.
         numEvents++;
@@ -643,17 +642,17 @@ void fifo()
 // VMS replacement policy simulation.
 void vms()
 {
-    struct PageTable pageTable = initPageTable();
-    struct DLinkedList afifo = initLinkedList();
-    struct DLinkedList bfifo = initLinkedList();
-    struct DLinkedList clean = initLinkedList();
-    struct DLinkedList dirty = initLinkedList();
+    PageTable pageTable = initPageTable();
+    DLinkedList afifo = initLinkedList();
+    DLinkedList bfifo = initLinkedList();
+    DLinkedList clean = initLinkedList();
+    DLinkedList dirty = initLinkedList();
 
     unsigned int address, pageNum, process, rss = numFrames / 2;
     char rw, exitCh;
     bool isProcessA;
 
-    struct PageTableEntry *page, *pageToRemove;
+    PageTableEntry *page, *pageToRemove;
     while (fscanf(traceFile, "%x %c", &address, &rw) != EOF) {
         numEvents++;
         pageNum = getPageNum(address);
@@ -691,7 +690,7 @@ void vms()
         // Find the page with pageNum within the page table.
         page = findEntry(pageTable, pageNum);
 
-        struct Node *node;
+        Node *node;
         // If the page is found, page hit.
         if (page != NULL) {
             // Remove the page from clean or dirty if its there.
